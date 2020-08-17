@@ -26,13 +26,19 @@ public class Utils {
         return fileList;
     }
 
-    public static byte[] readFile(String filePath, int i, int buferSize) throws IOException {
+    public static byte[] readFile(String filePath, int cnt, int buferSize) throws IOException {
         System.out.println(filePath);
         File file = new File( filePath );
-        byte[] bytes = new byte[(int) file.length()];
         InputStream fis = new FileInputStream( file );
-        //fis.read(bytes);
-        fis.read(bytes, i*buferSize, buferSize);
+        if (file.length() < buferSize) buferSize = (int) file.length();
+        byte[] bytes = new byte[buferSize];
+        int readingByte = 0;
+        fis.skip( (long) cnt*buferSize );
+        readingByte = fis.read(bytes);
+
+        System.out.println("readFile cnt="+cnt+" buferSize = "+buferSize+" readingByte = "+readingByte);
+        System.out.println(bytes.toString());
+        //fis.read(bytes, i, buferSize);
         fis.close();
         System.out.println("read from file "+bytes.length+" bytes.");
         return bytes;
@@ -40,11 +46,12 @@ public class Utils {
 
     public static void writeFile(String filePath, byte[] bytes,  int path) throws IOException {
         File file = Paths.get(filePath ).toFile();
-        OutputStream fos = new FileOutputStream( file );
+        boolean isAppend = false;
+        if (path != 0) isAppend = true;
         if (!file.exists()) file.createNewFile();
-        System.out.println("write to file:"+filePath);
-        System.out.println("write to file "+bytes.length+" bytes.");
-        fos.write(bytes, path * Property.getBuferSize(), bytes.length);
+
+        OutputStream fos = new FileOutputStream( file,  isAppend);
+        fos.write(bytes);
         fos.close();
     }
 }

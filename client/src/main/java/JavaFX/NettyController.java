@@ -2,11 +2,10 @@ package JavaFX;
 
 import NettyClient.NettyNetwork;
 import command.*;
+import javafx.concurrent.Task;
 import javafx.event.ActionEvent;
 import javafx.fxml.Initializable;
-import javafx.scene.control.Button;
-import javafx.scene.control.ListView;
-import javafx.scene.control.TextField;
+import javafx.scene.control.*;
 
 import java.io.IOException;
 import java.net.URL;
@@ -28,37 +27,67 @@ public class NettyController implements Initializable {
     public TextField localPath;
     public Button connDisconn;
     public TextField text;
+    public ProgressBar progressBar;
+    public ProgressIndicator progressIndicator;
+    public DialogPane authDialog;
+    public Label adLoginText;
+    public Label adPassText;
+    public PasswordField adPass;
+    public TextField adLogin;
+    public Button adLoginButton;
+    public Label errMessg;
     private NettyNetwork network;
 
 
     @Override
     public void initialize(URL location, ResourceBundle resources) {
+        showAuthDialog(false);
+        errMessg.setText( "" );
+
+
 
     }
 
+    private void showAuthDialog(boolean b) {
+        authDialog.setVisible( b );
+        adLoginText.setVisible( b );
+        adPassText.setVisible( b );
+        adPass.setVisible( b );
+        adLogin.setVisible( b );
+        adLoginButton.setVisible( b );
+        errMessg.setVisible( b );
+    }
 
 
     @SuppressWarnings("SingleStatementInBlock")
-    public void connectDisconnect(ActionEvent actionEvent) {
+    public void connectDisconnect(ActionEvent actionEvent) throws IOException {
+        //progressBar.setProgress( 0.5 );
+        //progressIndicator.setProgress( 0.5 );
+
         if (connDisconn.getText().equals( "connect" )){
+            showAuthDialog(true);
             try {
                 network = new NettyNetwork();
-
-                localPath.setText( Property.getClientsRootPath() );
-                serverPath.setText( Property.getServerRootPath() );
-
-                refreshLocalView();
-                refreshServerView();
-
-
-            } catch (IOException | ClassNotFoundException e) {
+            } catch (IOException e) {
                 e.printStackTrace();
             }
 
             connDisconn.setText( "disconnect" );
 
-        }else { connDisconn.setText( "connect" );}
+        }else {
+            Command command = new Command();
+            command.setType( CommandType.END );
+            network.sendMessage(command);
+            serverPath.setText( "" );
+            serverView.getItems().clear();
+            localView.getItems().clear();
+            localPath.setText( "" );
+            connDisconn.setText( "connect" );
+            showAuthDialog(false);
+        }
     }
+
+
 
     private void refreshServerView() throws IOException, ClassNotFoundException {
         Command command = new Command();
@@ -101,43 +130,57 @@ public class NettyController implements Initializable {
                 && mouseEvent.getClickCount() == 2 ) {
             Path path = Paths.get( serverPath.getText(), serverView.getSelectionModel().getSelectedItem() );
 
-            System.out.println(path.normalize().toString()+"!="+Property.getServerRootPath());
-            System.out.println("path.toFile().isFile() "+path.toFile().isFile());
 
             if (!path.normalize().toString().equalsIgnoreCase( Property.getServerRootPath() )
                     && !path.toFile().isFile()
             ) {
                 serverPath.setText( path.normalize().toString() );
-                System.out.println( "new dir:" + serverPath.getText() );
                 refreshServerView();
             }
         }
     }
 
-    public void copyFromServer(ActionEvent actionEvent) throws IOException, ClassNotFoundException {
+
+
+    public void copyFromServer(ActionEvent actionEvent) throws IOException, ClassNotFoundException, InterruptedException {
         //получить файл с сервера
         Path pathFrom = Paths.get( serverPath.getText(), serverView.getSelectionModel().getSelectedItem() );
         Path pathTo = Paths.get( localPath.getText(), serverView.getSelectionModel().getSelectedItem() );
         System.out.println("get File:"+pathFrom.normalize().toString()+"ToServer:"+pathTo);
         Command command = new Command();
         command.setType( CommandType.GET_FILE );
-        //command.setData( new ListFilesCommand(serverPath.getText()) );
         command.setData( new GetFileCommand(  pathFrom.toFile().getName(), pathFrom.toFile().getPath() ) );
-        System.out.println("sendCommand to server");
         network.sendMessage(command);
-        System.out.println("readMessage from server");
-        command = network.readMessage();
-        GetFileCommand getFileCommand = (GetFileCommand) command.getData();
-        System.out.println("writeFile");
-        Utils.writeFile(pathTo.toFile().getPath(), getFileCommand.getBytes(), getFileCommand.getPath() );
-       if (getFileCommand.getPaths() == getFileCommand.getPath()) {
-           System.out.println( "refresh" );
-           refreshServerView();
-           refreshLocalView();
-       }
+
+
+        int pats = 2;
+        int pat = 0;
+
+        progressBar.setVisible( true );
+        progressIndicator.setVisible( true );
+
+
+        while (pats - 1 > pat) {
+            command = network.readMessage();
+            GetFileCommand getFileCommand = (GetFileCommand) command.getData();
+            pats = getFileCommand.getPaths();
+            pat = getFileCommand.getPath();
+            System.out.println( "writeFile pat "+pat+" from "+pats );
+            Utils.writeFile( pathTo.toFile().getPath(), getFileCommand.getBytes(), getFileCommand.getPath() );
+            progressBar.setProgress( (double) (pat + 1) / pats );
+            progressIndicator.setProgress( (double) (pat+1)/pats );
+            System.out.println(progressBar.getProgress());
+            Thread.sleep(10);
+        }
+        System.out.println( "refresh" );
+        refreshServerView();
+        refreshLocalView();
+        progressBar.setVisible( false );
+        progressIndicator.setVisible( false );
+
     }
 
-    public void copyToServer(ActionEvent actionEvent) throws IOException, ClassNotFoundException {
+    public void copyToServer(ActionEvent actionEvent) throws IOException, ClassNotFoundException, InterruptedException {
         int paths = 0;
         long filesize = 0;
         //передать файл на сервер
@@ -156,12 +199,41 @@ public class NettyController implements Initializable {
             putFileCommand.setPath( i );
             putFileCommand.setPaths( paths );
             command.setData( putFileCommand );
+            System.out.println("Send command PUT_FILE to server at "+i+" by "+paths);
             network.sendMessage( command );
 
-            command = network.readMessage();
+            //command = network.readMessage();
         }
 
         refreshServerView();
+    }
 
+    public void SendLogin(ActionEvent actionEvent) throws IOException, ClassNotFoundException {
+        System.out.println("Login:"+adLogin.getText());
+        System.out.println("Pass:"+adPass.getText());
+        errMessg.setText( "" );
+        Command command = new Command();
+        command.setType( CommandType.AUTH );
+        command.setData( new AuthCommand(adLogin.getText(), adPass.getText() ) );
+        network.sendMessage( command );
+
+        command = network.readMessage();
+        if (command.getType() != CommandType.AUTH){
+            errMessg.setText( "Ошибка авторизации. Попробуйте позже." );
+        }else {
+            AuthCommand authCommand = (AuthCommand) command.getData();
+            if (!authCommand.getResult().equalsIgnoreCase( "OK" )){
+                errMessg.setText(  authCommand.getResult());
+            } else{
+                localPath.setText( Property.getClientsRootPath() );
+                serverPath.setText( Property.getServerRootPath() );
+
+                refreshLocalView();
+                refreshServerView();
+                showAuthDialog(false);
+                adLogin.setText( "" );
+                adPass.setText( "" );
+            }
+        }
     }
 }
