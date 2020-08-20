@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<GridPane alignment="center" hgap="10" vgap="10" xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="JavaFx.Controller">
+   <Pane prefHeight="425.0" prefWidth="543.0">
+      <Button fx:id="serverId" layoutX="397.0" layoutY="24.0" mnemonicParsing="false" onAction="#startServer" prefHeight="25.0" prefWidth="125.0" text="Запустить сервер" />
+   </Pane>
+   <columnConstraints>
+      <ColumnConstraints />
+   </columnConstraints>
+   <rowConstraints>
+      <RowConstraints />
+   </rowConstraints>
+</GridPane>
